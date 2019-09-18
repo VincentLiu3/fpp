@@ -4,6 +4,7 @@ import random
 
 from heapq import heapify, heappush, heappop
 
+
 class priority_dict(dict):
     """Dictionary that can be used as a priority queue.
 
@@ -89,6 +90,7 @@ class priority_dict(dict):
         while self:
             yield self.pop_smallest()
 
+
 class Replay_Buffer():
     def __init__(self, size):
         """Create Replay buffer.
@@ -110,18 +112,52 @@ class Replay_Buffer():
             self._storage.append(data)
             self._next_idx += 1
         else:
-            self._storage.popleft()
+            self._storage.popleft()  # pop the first transition
             self._storage.append(data)
 
     def replace_one(self, idx, data):
         self._storage[idx] = data
 
+    def sample_batch(self, num_batch, batch_len):
+        '''
+        sample M blocks of T transitions
+        where M = num_batch and T = batch_len
+        '''
+        ob_batch, state_tm1_batch, state_batch, y_batch, ind_batch = [], [], [], [], []
+        for m in range(num_batch):
+            ob_t, state_tm1, state_t, y_t, ind_t = self.sample_successive(batch_len)
+            ob_batch.append(ob_t)
+            state_tm1_batch.append(state_tm1)
+            state_batch.append(state_t)
+            y_batch.append(y_t)
+            ind_batch.append(ind_t)
+            # print(ind_t)
+            # print(y_t.shape)
+
+        ob_batch = np.concatenate(ob_batch, axis=1)
+        state_tm1_batch = np.concatenate(state_tm1_batch, axis=1)
+        state_batch = np.concatenate(state_batch, axis=1)
+        y_batch = np.concatenate(y_batch, axis=1)
+        ind_batch = np.array(ind_batch)
+        return ob_batch, state_tm1_batch, state_batch, y_batch, ind_batch
+
+    def sample_successive(self, batch_len):
+        '''
+        sample one block of T transitions
+        where T = batch_len
+        '''
+        if len(self._storage) <= batch_len:
+            idxes = [x for x in range(len(self._storage))]
+        else:
+            random_ix = np.random.randint(batch_len-1, len(self._storage) - 1)
+            idxes = [random_ix-x for x in range(batch_len-1, -1, -1)]  # from random_ix-T+1 to random_ix
+        return self._encode_sample(idxes)
+
     def _encode_sample(self, idxes):
         obses_t, ses_tm1, ses_t, ys_t = [], [], [], []
-
         for i in idxes:
-            data = self._storage[i]
-            obs_t, s_tm1,s_t, y_t = data
+            obs_t, s_tm1, s_t, y_t = self._storage[i]
+            #  = data
             obses_t.append(np.array(obs_t))
             ses_tm1.append(np.array(s_tm1))
             ses_t.append(np.array(s_t))
@@ -161,7 +197,6 @@ class Replay_Buffer():
         obs_t, s_tm1, s_t, y_t = data
         return obs_t, s_tm1, s_t, y_t, idx
 
-
     def one_sample_n(self,j):
         if len(self._storage) == 1:
             idx = 0
@@ -178,7 +213,7 @@ class Replay_Buffer():
             self._storage[idxes[i]] = data
             if self.check_first(idxes[i]) == True:
                 x_t_s_j, s_tm1_s_j,s_t_s_j, y_t_s_j,idx_s_j = self.get_sample_by_idx(idxes[i]-1)
-                data = (x_t_s_j, s_tm1_s_j,s_tm1[i], y_t_s_j)
+                data = (x_t_s_j, s_tm1_s_j, s_tm1[i], y_t_s_j)
                 self.replace_one(idx_s_j, data)
             if self.check_last(idxes[i]) == True:
                 x_t_s_j, s_tm1_s_j,s_t_s_j, y_t_s_j,idx_s_j = self.get_sample_by_idx(idxes[i]+1)
@@ -190,14 +225,6 @@ class Replay_Buffer():
             idxes = [0]
         else:
             idxes = [np.random.randint(0, len(self._storage) - 1) for _ in range(batch_size)]
-        return self._encode_sample(idxes)
-
-    def sample_successive(self, batch_size):
-        if len(self._storage) <= batch_size:
-            idxes = [x for x in range(len(self._storage))]
-        else:
-            random_ix = np.random.randint(batch_size-1, len(self._storage) - 1)
-            idxes = [random_ix-x for x in range(batch_size-1,-1,-1)]
         return self._encode_sample(idxes)
 
     def sample_successive_last(self, batch_size):
@@ -274,7 +301,6 @@ class Prioritized_Replay_Buffer():
         data = self._storage[idx]
         obs_t, s_tm1, s_tp1, obs_tp1, y_t = data
         return obs_t, s_tm1, s_tp1, obs_tp1, y_t, idx
-
 
     def one_sample_n(self,j):
         if len(self._storage) == 1:

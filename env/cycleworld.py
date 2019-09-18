@@ -7,7 +7,7 @@ class CycleWorld:
         self.num_states = num_states
         
     def step(self, gammas=np.zeros(0)):
-        self.cur_state = (self.cur_state + 1)%self.num_states
+        self.cur_state = (self.cur_state + 1) % self.num_states
         action = 0
 
         num_predictions = 1 + len(gammas)
@@ -23,10 +23,9 @@ class CycleWorld:
         for i in range(1, num_predictions):
             y_tp1[i] = pow(gammas[i-1], (self.num_states - 1) - self.cur_state)
 
-
-        return self.createPhi(s_tp1, action), action, s_tp1, y_tp1
+        return self.create_phi(s_tp1, action), action, s_tp1, y_tp1
     
-    def createPhi(self,state,action):
+    def create_phi(self, state, action):
         phi = np.zeros(3)
         phi[0] = 1
         phi[1] = state[0]

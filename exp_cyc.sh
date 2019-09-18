@@ -1,6 +1,6 @@
 #!/bin/sh
 #BPTT
-python3 main.py --total_length=100000 --use_bptt=True --time_steps=1 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=10
+#python3 main.py --total_length=100000 --use_bptt=True --time_steps=1 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=10
 # python3 main.py --total_length=100000 --use_bptt=True --time_steps=2 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=30 &
 # python3 main.py --total_length=100000 --use_bptt=True --time_steps=6 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=30 &
 
@@ -13,7 +13,7 @@ python3 main.py --total_length=100000 --use_bptt=True --time_steps=1 --batch_siz
 
 # wait
 # # ##NORMAL
-# python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=False --buffer_length=1000 --updates_per_step=1 --state_updates_per_step=0  --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
+# python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=False --buffer_length=1000 --updates_per_step=1 --state_updates_per_step=0  --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 --verbose=True
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=False --buffer_length=1000 --updates_per_step=2 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=False --buffer_length=1000 --updates_per_step=3 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=False --buffer_length=1000 --updates_per_step=5 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
@@ -22,7 +22,7 @@ python3 main.py --total_length=100000 --use_bptt=True --time_steps=1 --batch_siz
 
 # wait
 # # ##HYBRID
-# python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=True --anneal_thresh_value=1.2 --anneal_thresh_steps=29999 --buffer_length=1000 --updates_per_step=1 --state_updates_per_step=0  --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
+python3 main.py --total_length=10000 --use_bptt=False --use_buffer_bptt=False --use_hybrid=True --buffer_length=1000 --updates_per_step=15 --num_update=1 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.001 --output_learning_rate=0.001 --state_learning_rate=0.001 --runs=5 --verbose=True
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=True --anneal_thresh_value=1.2 --anneal_thresh_steps=29999 --buffer_length=1000 --updates_per_step=2 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=True --anneal_thresh_value=1.2 --anneal_thresh_steps=29999 --buffer_length=1000 --updates_per_step=3 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
 # python3 main.py --total_length=100000 --use_bptt=False --use_prioritized_exp_replay=False --use_hybrid=True --anneal_thresh_value=1.2 --anneal_thresh_steps=29999 --buffer_length=1000 --updates_per_step=5 --state_updates_per_step=0 --batch_size=1 --num_units=4 --dataset='cycleworld' --cycleworld_size=6 --learning_rate=0.01 --output_learning_rate=0.01 --state_learning_rate=0.01 --runs=5 &
