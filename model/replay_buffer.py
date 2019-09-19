@@ -115,9 +115,6 @@ class Replay_Buffer():
             self._storage.popleft()  # pop the first transition
             self._storage.append(data)
 
-    def replace_one(self, idx, data):
-        self._storage[idx] = data
-
     def sample_batch(self, num_batch, batch_len):
         '''
         sample M blocks of T transitions
@@ -134,6 +131,9 @@ class Replay_Buffer():
             # print(ind_t)
             # print(y_t.shape)
 
+            # print(ob_t.shape)
+            # print(state_t.shape)
+            # print(y_t.shape)
         ob_batch = np.concatenate(ob_batch, axis=1)
         state_tm1_batch = np.concatenate(state_tm1_batch, axis=1)
         state_batch = np.concatenate(state_batch, axis=1)
@@ -154,15 +154,23 @@ class Replay_Buffer():
         return self._encode_sample(idxes)
 
     def _encode_sample(self, idxes):
-        obses_t, ses_tm1, ses_t, ys_t = [], [], [], []
+        ob_batch, state_tm1_batch, state_batch, y_batch = [], [], [], []
         for i in idxes:
             obs_t, s_tm1, s_t, y_t = self._storage[i]
             #  = data
-            obses_t.append(np.array(obs_t))
-            ses_tm1.append(np.array(s_tm1))
-            ses_t.append(np.array(s_t))
-            ys_t.append(np.array(y_t))
-        return np.array(obses_t), np.array(ses_tm1), np.array(ses_t), np.array(ys_t), idxes
+            ob_batch.append(np.array(obs_t))
+            # print('get', obs_t.shape)
+            state_tm1_batch.append(np.array(s_tm1))
+            state_batch.append(np.array(s_t))
+            y_batch.append(np.array(y_t))
+
+        # print(ob_batch[0].shape)
+        # print(len(ob_batch))
+        ob_batch = np.concatenate(ob_batch, axis=0)
+        # ob_batch.shape = [T, 1, n_input]
+        # state_batch.shape = [T, 1, n_unit]
+        # y_batch.shape = [T, 1, n_class]
+        return ob_batch, np.array(state_tm1_batch), np.array(state_batch), np.array(y_batch), idxes
 
     def one_sample(self):
         if len(self._storage) == 1:
@@ -180,46 +188,58 @@ class Replay_Buffer():
         else:
             return False
 
-    def check_last(self,idx):
+    def not_last(self, idx):
         if idx < len(self._storage)-1:
             return True
         else:
             return False
 
-    def check_first(self,idx):
+    def not_first(self, idx):
         if idx == 0:
             return False
         else:
             return True
 
-    def get_sample_by_idx(self,idx):
+    def get_sample_by_idx(self, idx):
         data = self._storage[idx]
         obs_t, s_tm1, s_t, y_t = data
         return obs_t, s_tm1, s_t, y_t, idx
 
-    def one_sample_n(self,j):
+    def replace_one(self, idx, data):
+        self._storage[idx] = data
+
+    def replace(self, idxes, obs_batch, s_tm1_batch, s_t_batch, y_batch, time_len):
+        for i in range(time_len):
+            obs_t = np.expand_dims(obs_batch[i], axis=0)
+            s_tm1 = s_tm1_batch[i]
+            s_t = s_t_batch[i]
+            y_t = y_batch[i]
+            # print('buffer replace', obs_t.shape)
+            # print('buffer replace', s_tm1.shape)
+            # print('buffer replace', s_t.shape)
+            # print('buffer replace', y_t.shape)
+            data = (obs_t, s_tm1, s_t, y_t)
+            self._storage[idxes[i]] = data
+
+            if self.not_first(idxes[i]):
+                x_t_s_j, s_tm1_s_j, s_t_s_j, y_t_s_j, idx_s_j = self.get_sample_by_idx(idxes[i]-1)
+                data = (x_t_s_j, s_tm1_s_j, s_tm1, y_t_s_j)
+                self.replace_one(idx_s_j, data)
+            if self.not_last(idxes[i]):
+                x_t_s_j, s_tm1_s_j, s_t_s_j, y_t_s_j, idx_s_j = self.get_sample_by_idx(idxes[i]+1)
+                data = (x_t_s_j, s_t, s_t_s_j, y_t_s_j)
+                self.replace_one(idx_s_j, data)
+
+    def one_sample_n(self, j):
         if len(self._storage) == 1:
             idx = 0
         else:
-            idx = self._next_idx-j-1
+            idx = self._next_idx - j - 1
         data = self._storage[idx]
         obs_t, s_tm1, s_t, s_tp1, obs_tp1, y_t = data
-        
+
         return obs_t, s_tm1, s_t, y_t, idx
 
-    def replace(self, idxes, obs_t, s_tm1, s_t, y_t, batch_size):
-        for i in range(batch_size):
-            data = (obs_t[i], s_tm1[i], s_t[i], y_t[i])
-            self._storage[idxes[i]] = data
-            if self.check_first(idxes[i]) == True:
-                x_t_s_j, s_tm1_s_j,s_t_s_j, y_t_s_j,idx_s_j = self.get_sample_by_idx(idxes[i]-1)
-                data = (x_t_s_j, s_tm1_s_j, s_tm1[i], y_t_s_j)
-                self.replace_one(idx_s_j, data)
-            if self.check_last(idxes[i]) == True:
-                x_t_s_j, s_tm1_s_j,s_t_s_j, y_t_s_j,idx_s_j = self.get_sample_by_idx(idxes[i]+1)
-                data = (x_t_s_j, s_t[i],s_t_s_j, y_t_s_j)
-                self.replace_one(idx_s_j, data)
-    
     def sample(self, batch_size):
         if len(self._storage) == 1:
             idxes = [0]

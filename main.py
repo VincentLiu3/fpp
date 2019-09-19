@@ -26,7 +26,7 @@ flags.DEFINE_bool('verbose', False, 'Print Log')
 flags.DEFINE_string('dataset', 'stochastic_dataset', 'Name of dataset: cycleworld, stochastic_dataset, ptb')
 flags.DEFINE_integer('cycleworld_size', 10, 'CycleWorld Size')
 flags.DEFINE_integer('total_length', 100000, 'Length of entire dataset')
-flags.DEFINE_integer('num_trajectory', 1, 'number of trajectory')
+flags.DEFINE_integer('num_trajectory', 1, 'Number of trajectory')
 flags.DEFINE_integer('runs', 1, 'Number of Runs')
 
 flags.DEFINE_float('learning_rate', 0.001, 'Learning rate')
@@ -39,6 +39,7 @@ flags.DEFINE_float('lambda_state', 1, 'Lambda')
 
 flags.DEFINE_bool('use_hybrid', False, 'Hybrid mode')
 flags.DEFINE_bool('use_buffer_bptt', False, 'Buffer BPTT')
+flags.DEFINE_bool('fix_buffer', False, 'for fixed buffer experiments')
 
 flags.DEFINE_integer('time_steps', 1, 'Truncate Parameter')
 flags.DEFINE_integer('buffer_length', 1000, 'Buffer Length')
@@ -58,6 +59,9 @@ flags.DEFINE_integer('state_updates_per_step', 0, 'Number of State Updates per S
 assert FLAGS.time_steps == 1, 'set FLAGS.time_steps to 1.'
 assert FLAGS.use_hybrid is True, 'use hybrid.'
 assert FLAGS.learning_rate == FLAGS.output_learning_rate and FLAGS.output_learning_rate == FLAGS.state_learning_rate, 'lr'
+
+if FLAGS.fix_buffer:
+    assert FLAGS.buffer_length == FLAGS.total_length, 'set total_length = buffer_length for fix buffer.'
 
 if FLAGS.dataset == 'cycleworld':
     data_name = '{}_cw'.format(FLAGS.cycleworld_size)
@@ -101,8 +105,8 @@ os.makedirs(pathname, exist_ok=True)
 if FLAGS.dataset == 'ptb':
     X, Y = data_ptb(batch_size=FLAGS.num_trajectory)
     num_batches = np.shape(X)[0]
-    accuracy_series = np.zeros(shape=(FLAGS.runs,num_batches//100))
-    loss_series = np.zeros(shape=(FLAGS.runs,num_batches//100))
+    accuracy_series = np.zeros(shape=(FLAGS.runs, num_batches//100))
+    loss_series = np.zeros(shape=(FLAGS.runs, num_batches//100))
     # num_batches = 1000
 else:
     num_batches = FLAGS.total_length // FLAGS.num_trajectory
@@ -127,23 +131,10 @@ for run_no in range(FLAGS.runs):
         if FLAGS.verbose:
             logging.info(msg)
 
-    if FLAGS.use_bptt:
-        model = BPTT_Model(
-                           FLAGS.dataset,
-                           FLAGS.use_lstm,
-                           FLAGS.n_input,
-                           FLAGS.n_classes,
-                           FLAGS.num_units,
-                           FLAGS.num_trajectory,
-                           FLAGS.time_steps,
-                           FLAGS.learning_rate,
-                           FLAGS.clip_gradients,
-                           run_no)
-    else:
-        model = FPT_Model(FLAGS.dataset, FLAGS.use_lstm, FLAGS.n_input, FLAGS.n_classes, FLAGS.num_units,
-                          FLAGS.num_trajectory, FLAGS.batch_size, FLAGS.updates_per_step, FLAGS.state_updates_per_step,
-                          FLAGS.learning_rate, FLAGS.output_learning_rate, FLAGS.state_learning_rate,
-                          FLAGS.clip_gradients, FLAGS.use_buffer_bptt, FLAGS.lambda_state, run_no)
+    model = FPT_Model(FLAGS.dataset, FLAGS.use_lstm, FLAGS.n_input, FLAGS.n_classes, FLAGS.num_units,
+                      FLAGS.num_trajectory, FLAGS.batch_size, FLAGS.updates_per_step, FLAGS.state_updates_per_step,
+                      FLAGS.learning_rate, FLAGS.output_learning_rate, FLAGS.state_learning_rate,
+                      FLAGS.clip_gradients, FLAGS.use_buffer_bptt, FLAGS.lambda_state, run_no)
 
     # if FLAGS.use_prioritized_exp_replay:
     #     buffer = Prioritized_Replay_Buffer(FLAGS.buffer_length, FLAGS.alpha)
@@ -167,9 +158,6 @@ for run_no in range(FLAGS.runs):
             X, Y = generate_stochastic_data(FLAGS.num_trajectory, num_batches)
         elif FLAGS.dataset == 'ptb':
             pass
-            ##### Check both fpt and bptt for vocab size
-            # X, Y = data_ptb(vocab_size = 10000, batch_size=FLAGS.batch_size,num_steps=1)
-            # num_batches = 10
 
         iter = FLAGS.time_steps
         # corr = 0
@@ -179,14 +167,7 @@ for run_no in range(FLAGS.runs):
         sum_acc = 0
         sum_loss = 0
         loss_all = 0
-
         count = 0
-        # use_hybrid is True for normal FPP
-        # if FLAGS.use_hybrid is False:
-        #     random_no = 1.0
-        #     threshold = 0.0
-        # else:
-        # threshold = 1.0
 
         pred_series = []
         losses = []
@@ -200,159 +181,86 @@ for run_no in range(FLAGS.runs):
             state = np.zeros(shape=[FLAGS.num_trajectory, FLAGS.num_units])
 
         while iter < num_batches:
-            if FLAGS.dataset == 'ptb':
-                batch_x = X[iter-FLAGS.time_steps:iter].T
-                batch_y = Y[iter-FLAGS.time_steps:iter].T
-                
-                if FLAGS.use_bptt is False:
-                    x_t = batch_x[0].reshape([FLAGS.num_trajectory,1])
-                    y_t = batch_y[0].reshape([FLAGS.num_trajectory,1])
+            # get slice from time (iter-T to iter)
+            batch_x = X[:, iter-FLAGS.time_steps:iter].reshape([FLAGS.num_trajectory, FLAGS.time_steps, FLAGS.n_input])
+            batch_y = Y[:, iter-FLAGS.time_steps:iter].reshape([FLAGS.num_trajectory, FLAGS.time_steps, FLAGS.n_classes])
+            x_t = batch_x[:, 0, :].reshape([1, FLAGS.num_trajectory, FLAGS.n_input])
+            y_t = batch_y[:, 0, :]
 
-                batch_x = np.squeeze(batch_x,axis=0)
-                batch_y = np.squeeze(batch_y,axis=0)
+            state_tm1 = state  # save previous state vector
+            output, state, acc, loss = sess.run([model.output, model.state, model.accuracy, model.loss],
+                                                feed_dict={
+                                                model.x: x_t,  # shape = (None, 1, n_input)
+                                                model.y: y_t,  # shape = (None, n_class)
+                                                model.init_state: state
+                                                })
 
-            else:
-                # get slice from time (iter-T to iter)
-                batch_x = X[:, iter-FLAGS.time_steps:iter].reshape([FLAGS.num_trajectory, FLAGS.time_steps, FLAGS.n_input])
-                batch_y = Y[:, iter-FLAGS.time_steps:iter].reshape([FLAGS.num_trajectory, FLAGS.time_steps, FLAGS.n_classes])
-                x_t = batch_x[:, 0, :].reshape([FLAGS.num_trajectory, 1, FLAGS.n_input])
-                y_t = batch_y[:, 0, :]
-                
-            if FLAGS.use_bptt:
-                output, loss, state, _, acc = sess.run([output_op, loss_op, model.state_last, model.train, model.accuracy],
-                                                       feed_dict={
-                                                        model.x: batch_x,
-                                                        model.y: batch_y,
-                                                        model.state_placeholder: state
-                                                       })
-                # print(np.shape(batch_x))
-                # print(batch_x[0])
-                # input()
-                # print(state.shape)
-                sum_acc += acc
-                sum_loss += loss
-                loss_all += loss
-            else:
-                state_tm1 = state  # save previous state vector
-                output, state, acc, loss = sess.run([model.output, model.state, model.accuracy, model.loss],
-                                                    feed_dict={
-                                                    model.x: x_t,  # shape = (None, 1, n_input)
-                                                    model.y: y_t,  # shape = (None, n_class)
-                                                    model.state_placeholder: state
-                                                    })
+            data = x_t, state_tm1, state, y_t  # (o_t, s_t-1, s_t, y_t) in the paper
+            # print('add', x_t.shape)
+            # print('add', state_tm1.shape)
+            # print('add', state.shape)
+            # print('add', y_t.shape)
 
-                data = x_t, state_tm1, state, y_t  # (o_t, s_t-1, s_t, y_t) in the paper
-                buffer.add(data)
-                # if FLAGS.use_prioritized_exp_replay is False:
-                #     buffer.add(data)
-                # else:
-                #     buffer.add(data, loss)
+            # x_t.shape = [1, 1, n_input]
+            # state.shape = [1, n_units]
+            # y_t.shape = [1, n_class[]
+            buffer.add(data)
 
-                sum_acc += acc
-                sum_loss += loss/FLAGS.time_steps
-                loss_all += loss/FLAGS.time_steps
+            sum_acc += acc
+            sum_loss += loss/FLAGS.time_steps
+            loss_all += loss/FLAGS.time_steps
 
+            if FLAGS.fix_buffer is False:
                 # TRAINING
                 if iter > FLAGS.updates_per_step:  # updates_per_step = T
                     if FLAGS.use_hybrid:
-                        # random_no = abs(np.random.random())
-                        # if iter % FLAGS.anneal_thresh_steps == 0:
-                        #     # if FLAGS.updates_per_step != 1:
-                        #     #     FLAGS.updates_per_step -= 1
-                        #     #     model.change_sample_updates(FLAGS.updates_per_step)
-                        #     threshold /= FLAGS.anneal_thresh_value
-                        # if random_no < threshold:
-                        # this will be true always for normal FPP
                         for _ in range(FLAGS.num_update):
                             # x_t_series, s_tm1_series, s_t_series, y_t_series, idx_series = buffer.sample_successive(FLAGS.updates_per_step)
                             x_t_series, s_tm1_series, s_t_series, y_t_series, idx_series = buffer.sample_batch(FLAGS.batch_size, FLAGS.updates_per_step)
+                            # print('sample', x_t_series.shape)
+                            # print('sample', s_tm1_series.shape)
+                            # print('sample', s_t_series.shape)
+                            # print('sample', y_t_series.shape)
+                            # print('sample', idx_series)
 
                             _, new_s_tm1, new_s_t = sess.run([model.train_seq, model.state_tm1_c_seq, model.state_t_c_seq],
-                                                                 feed_dict={
-                                                                    model.x_t: x_t_series,  # [T, B, 1, n_input]
-                                                                    model.y_t: y_t_series,  # [T, B, n_class]
-                                                                    model.s_tm1: s_tm1_series,  # [T, B, n_unit]
-                                                                    model.s_t: s_t_series  # [T, B, n_unit]
-                                                                 })
+                                                             feed_dict={
+                                                                model.x_t: x_t_series,  # [T, B, 1, n_input]
+                                                                model.y_t: y_t_series,  # [T, B, n_class]
+                                                                model.s_tm1: s_tm1_series,  # [T, B, n_unit]
+                                                                model.s_t: s_t_series  # [T, B, n_unit]
+                                                             })
 
                             for b in range(idx_series.shape[0]):
+                                # print(b)
                                 new_s_tm1_series = np.expand_dims(s_tm1_series[:, b, :], axis=1)
                                 new_s_t_series = np.expand_dims(s_t_series[:, b, :], axis=1)
                                 new_s_tm1_series[0] = np.expand_dims(new_s_tm1[b], axis=0)
                                 new_s_t_series[-1] = np.expand_dims(new_s_t[b], axis=0)
 
-                                new_x_t_series = np.expand_dims(x_t_series[:, b, :, :], axis=1)
+                                new_x_t_series = np.expand_dims(x_t_series[:, b, :], axis=1)
                                 new_y_t_series = np.expand_dims(y_t_series[:, b, :], axis=1)
+
+                                # print('replace', new_x_t_series.shape)
+                                # print('replace', new_s_tm1_series.shape)
+                                # print('replace', new_s_t_series.shape)
+                                # print('replace', new_y_t_series.shape)
                                 # update S_{t-T} and S_t in the buffer
                                 buffer.replace(idx_series[b], new_x_t_series, new_s_tm1_series, new_s_t_series, new_y_t_series, FLAGS.updates_per_step)
 
                     else:
                         assert False, 'wrong implemntation'
-                        for _ in range(FLAGS.updates_per_step):
-                            x_t_series, s_tm1_series,s_t_series, y_t_series, idx_series = buffer.sample(FLAGS.updates_per_step)
-
-                            _,s_tm1_c_series,s_t_c_series = sess.run([model.train, model.state_tm1_c, model.state_t_c],
-                                                        feed_dict={
-                                                        model.x_t: x_t_series,
-                                                        model.y_t:y_t_series ,
-                                                        model.s_tm1:s_tm1_series,
-                                                        model.s_t:s_t_series,
-                                                        })
-
-                        if FLAGS.use_lstm:
-                            s_tm1_c_series = np.reshape(s_tm1_c_series, [FLAGS.updates_per_step,2,FLAGS.num_trajectory, FLAGS.num_units])
-                            s_t_c_series = np.reshape(s_t_c_series, [FLAGS.updates_per_step,2,FLAGS.num_trajectory, FLAGS.num_units])
-
-                        else:
-                            s_tm1_c_series = np.reshape(s_tm1_c_series, [FLAGS.updates_per_step,FLAGS.batch_size,FLAGS.num_units])
-                            s_t_c_series = np.reshape(s_t_c_series, [FLAGS.updates_per_step,FLAGS.batch_size,FLAGS.num_units])
-
-                        buffer.replace(idx_series, x_t_series, s_tm1_c_series, s_t_c_series, y_t_series, FLAGS.updates_per_step)
-                    
-            # if iter % 1000 == 0:
-            #     if FLAGS.use_bptt is False:
-            #         # decrease the learfning rate. Why do we do this?
-            #         FLAGS.state_learning_rate /= 3
-            #         model.update_state_lr(FLAGS.state_learning_rate)
 
             if iter % 100 == 0:
                 # steps.append(iter)
-                if FLAGS.use_bptt:
-                    pred_series.append(sum_acc/100)
-                    losses.append(sum_loss/100)
-                    with open(log_file, 'a') as f:
-                        if FLAGS.dataset == 'ptb':
-                            print("Predictions at step",iter,"Correct: {}, Loss: {}, Perp: {}".format(sum_acc,sum_loss/count,np.exp(loss_all/iter)),file = f)
-                        else:
-                            print("Predictions at step",iter,"Correct: {}, Loss: {}".format(sum_acc/100,sum_loss/100), file=f)
-                    
-                    if FLAGS.verbose:
-                        # print to std_out
-                        if FLAGS.dataset == 'ptb':
-                            print('Steps:',iter,'Accuracy:',sum_acc/(100),'Loss:{}, Perp: {}'.format(sum_loss/(100),np.exp(loss_all/iter)))
-                        else:
-                            print('Steps:',iter,'Accuracy:',sum_acc/(100),'Loss:',sum_loss/(100))
-                    # print(grad)
-                else:
-                    pred_series.append(sum_acc)
-                    losses.append(sum_loss/count)
+                pred_series.append(sum_acc)
+                losses.append(sum_loss/count)
 
-                    with open(log_file, 'a') as f:
-                        # if FLAGS.dataset == 'ptb':
-                        #     print("Predictions at step",iter,"Correct: {}, Loss: {}, Perp: {}".format(sum_acc,sum_loss/count,np.exp(loss_all/iter)),file = f)
-                        # else:
-                        f.write('Steps {}. Accuracy {:.2f}. Loss {:4f}.\n'.format(iter, sum_acc/100, sum_loss/count))
+                with open(log_file, 'a') as f:
+                    f.write('Steps {}. Accuracy {:.2f}. Loss {:4f}.\n'.format(iter, sum_acc/100, sum_loss/count))
 
-                    # print([(v.name,sess.run(v)) for v in tf.trainable_variables() if v.name.startswith('rnn')])
-                    # # print([(v.name,sess.run(v)) for v in tf.trainable_variables() if v.name.startswith('fully')])
-                    # print(target)
-                    # print(predicted.T)
-                    if FLAGS.verbose:
-                        # if FLAGS.dataset == 'ptb':
-                        #     print('Steps:',iter,'Accuracy:',sum_acc/100,'Loss:{}, Perp: {}'.format(sum_loss/(count),np.exp(loss_all/iter)))
-                        # else:
-                        logging.info('Steps {}. Accuracy {:.2f}. Loss {:4f}.'.format(iter, sum_acc/100, sum_loss/count))
-                    # print(grad)
+                if FLAGS.verbose:
+                    logging.info('Steps {}. Accuracy {:.2f}. Loss {:4f}.'.format(iter, sum_acc/100, sum_loss/count))
 
                 # corr = 0
                 sum_acc = 0
@@ -361,6 +269,66 @@ for run_no in range(FLAGS.runs):
 
             count += 1
             iter += 1
+
+        if FLAGS.fix_buffer:
+            T = FLAGS.updates_per_step
+            for iter_id in range(2 * num_batches):
+                # Training
+                x_t_series, s_tm1_series, s_t_series, y_t_series, idx_series = buffer.sample_batch(FLAGS.batch_size, T)
+
+                _, new_s_tm1, new_s_t = sess.run([model.train_seq, model.state_tm1_c_seq, model.state_t_c_seq],
+                                                 feed_dict={
+                                                     model.x_t: x_t_series,  # [T, B, 1, n_input]
+                                                     model.y_t: y_t_series,  # [T, B, n_class]
+                                                     model.s_tm1: s_tm1_series,  # [T, B, n_unit]
+                                                     model.s_t: s_t_series  # [T, B, n_unit]
+                                                 })
+
+                # if FLAGS.use_buffer_bptt is False:
+                for b in range(idx_series.shape[0]):
+                    new_s_tm1_series = np.expand_dims(s_tm1_series[:, b, :], axis=1)
+                    new_s_t_series = np.expand_dims(s_t_series[:, b, :], axis=1)
+                    new_s_tm1_series[0] = np.expand_dims(new_s_tm1[b], axis=0)
+                    new_s_t_series[-1] = np.expand_dims(new_s_t[b], axis=0)
+
+                    new_x_t_series = np.expand_dims(x_t_series[:, b, :], axis=1)
+                    new_y_t_series = np.expand_dims(y_t_series[:, b, :], axis=1)
+
+                    # update S_{t-T} and S_t in the buffer
+                    buffer.replace(idx_series[b], new_x_t_series, new_s_tm1_series, new_s_t_series, new_y_t_series,
+                                   FLAGS.updates_per_step)
+
+                # Testing: what do we want to report the accuracy?
+                if (iter_id+1) % 100 == 0:
+                    # Testing
+                    test_id = 0
+                    val_loss = 0
+                    val_acc = 0
+                    count = 0
+                    training_state = np.zeros((1, FLAGS.num_units))
+
+                    while test_id <= num_batches - T:
+                        batch_x = X[:, test_id:(test_id+T)].reshape([T, 1, FLAGS.n_input])
+                        batch_y = Y[:, test_id:(test_id+T)].reshape([T, 1, FLAGS.n_classes])
+
+                        val_loss_, val_acc_, training_state = sess.run([model.val_loss, model.val_acc, model.val_state],
+                                                                       feed_dict={
+                                                                       model.val_input: batch_x,  # [T, 1, n_input]
+                                                                       model.val_label: batch_y,  # [T, 1, n_class]
+                                                                       model.init_state: training_state  # [1, n_unit]
+                                                                       })
+                        # print(val_acc_)
+                        val_loss += val_loss_
+                        val_acc += val_acc_ * T  # number of correct prediction
+                        test_id += T
+                        count += T
+
+                    # with open(log_file, 'a') as f:
+                    #     f.write('Batch training: Steps {}. Loss {:4f}.\n'.format(iter, val_loss))
+
+                    if FLAGS.verbose:
+                        logging.info('Batch training: Steps {}. Acc {:.2f}. Loss {:4f}.'.format(iter_id+1, val_acc/count,
+                                                                                                val_loss/count))
 
     accuracy_series[run_no] = pred_series
     loss_series[run_no] = losses
