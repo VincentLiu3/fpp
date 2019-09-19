@@ -99,8 +99,9 @@ else:
     pathname = dir_name + 'bptt/'
     filename = data_name + 'lr_{}_bptt_T_{}'.format(FLAGS.learning_rate, FLAGS.time_steps)
 
-log_file = "logs/{}_log.txt".format(filename)
 os.makedirs(pathname, exist_ok=True)
+os.makedirs('logs', exist_ok=True)
+log_file = "logs/{}.log".format(filename)
 
 if FLAGS.dataset == 'ptb':
     X, Y = data_ptb(batch_size=FLAGS.num_trajectory)

@@ -114,7 +114,6 @@ class FPT_Model:
 
         self.train_seq = tf.group(self.train_lstm, self.train_output)
 
-
         # Val
         self.val_input = tf.placeholder(tf.float32, [self.sample_updates, 1, self.n_input], name='Input0')
         self.val_label = tf.placeholder(tf.float32, [self.sample_updates, 1, self.n_classes], name='Target')
@@ -122,12 +121,14 @@ class FPT_Model:
         self.input_seq = tf.unstack(self.val_input, self.sample_updates, axis=0)  # (M, T, batch_size, n_inpu)
         self.output_seq, self.val_state = tf.nn.static_rnn(self.cell, self.input_seq, dtype="float32", initial_state=self.init_state)
 
+        self.output_seq = tf.squeeze(self.output_seq, axis=1)
+        self.val_label = tf.squeeze(self.val_label, axis=1)
+
         self.logits_seq = tf.matmul(self.output_seq, self.W) + self.b
-        print(self.logits_seq)
 
         # self.y_as_list_seq = tf.unstack(self.y_t, num=self.sample_updates, axis=0)
         self.val_loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(self.val_label, self.logits_seq))
-        self.val_pred = tf.equal(tf.argmax(self.val_label, 2), tf.argmax(self.logits_seq, 2))
+        self.val_pred = tf.equal(tf.argmax(self.val_label, 1), tf.argmax(self.logits_seq, 1))
         self.val_acc = tf.reduce_mean(tf.cast(self.val_pred, "float"))
 
     # def sequentialise_input(self):
