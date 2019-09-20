@@ -166,11 +166,11 @@ class Replay_Buffer():
 
         # print(ob_batch[0].shape)
         # print(len(ob_batch))
-        ob_batch = np.concatenate(ob_batch, axis=0)
+        # ob_batch = np.concatenate(ob_batch, axis=0)
         # ob_batch.shape = [T, 1, n_input]
         # state_batch.shape = [T, 1, n_unit]
         # y_batch.shape = [T, 1, n_class]
-        return ob_batch, np.array(state_tm1_batch), np.array(state_batch), np.array(y_batch), idxes
+        return np.array(ob_batch), np.array(state_tm1_batch), np.array(state_batch), np.array(y_batch), idxes
 
     def one_sample(self):
         if len(self._storage) == 1:
@@ -210,7 +210,7 @@ class Replay_Buffer():
 
     def replace(self, idxes, obs_batch, s_tm1_batch, s_t_batch, y_batch, time_len):
         for i in range(time_len):
-            obs_t = np.expand_dims(obs_batch[i], axis=0)
+            obs_t = obs_batch[i]  # np.expand_dims(, axis=0)
             s_tm1 = s_tm1_batch[i]
             s_t = s_t_batch[i]
             y_t = y_batch[i]

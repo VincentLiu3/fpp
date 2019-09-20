@@ -3,23 +3,20 @@ import tensorflow as tf
 
 
 class FPT_Model:
-    def __init__(self, dataset, use_lstm, n_input, n_classes, num_units, num_trajectory, batch_size, sample_updates,
-                 state_updates, learning_rate, learning_rate_output, learning_rate_state, clip_gradients,
-                 use_buffer_bptt, lambda_state, run_number):
+    def __init__(self, dataset, use_buffer_bptt, fix_buffer, n_input, n_classes, num_units, batch_size, sample_updates,
+                 learning_rate, clip_gradients, lambda_state, run_number):
         assert dataset != 'ptb'
         tf.set_random_seed(run_number)
         self.use_buffer_bptt = use_buffer_bptt
+        self.fix_buffer = fix_buffer
         self.learning_rate = learning_rate
-        self.state_learning_rate = learning_rate_state
-        self.learning_rate_output = learning_rate_output
+        self.state_learning_rate = learning_rate
+        self.learning_rate_output = learning_rate
         self.num_units = num_units  # number of hidden state in RNN
-        self.use_lstm = use_lstm
         self.n_input = n_input  # inpute dimension
         self.n_classes = n_classes
         self.clip_gradients = clip_gradients
         self.sample_updates = sample_updates  # T = updates_per_step
-        self.state_updates = state_updates
-        self.num_trajectory = num_trajectory
         self.batch_size = batch_size
         self.lambda_state = lambda_state
         self.dataset = dataset
@@ -42,7 +39,7 @@ class FPT_Model:
         # self.create_output()
         self.lstm_output, self.state = tf.nn.static_rnn(self.cell, self.x_sequential,
                                                         initial_state=self.init_state, dtype=tf.float32)
-        # self.state.shape = [None, n_units]
+        # self.state.shape = [1, n_units]
         self.logits = [tf.matmul(output_t, self.W) + self.b for output_t in self.lstm_output]
         self.output = [tf.nn.softmax(logit) for logit in self.logits]
 
@@ -55,11 +52,8 @@ class FPT_Model:
         # self.get_training_vars_batch()
         self.x_t = tf.placeholder(tf.float32, [self.sample_updates, None, self.n_input], name='Input0')
         self.y_t = tf.placeholder(tf.float32, [self.sample_updates, None, self.n_classes], name='Target')
-
         self.s_tm1 = tf.placeholder(tf.float32, [self.sample_updates, None, self.num_units], name='State_tm1')
-        self.state_tm1 = self.s_tm1  # S_(t-1) from the buffer
         self.s_t = tf.placeholder(tf.float32, [self.sample_updates, None, self.num_units], name='State_t')
-        self.state_t = self.s_t
 
         # self.traning_loss_batch()
         # self.create_train()
@@ -69,20 +63,25 @@ class FPT_Model:
         state_t = self.s_t[-1]
 
         # self.x_new_seq = tf.squeeze(self.x_t, [2])  # remove all dimensions of size 1 (only axis 2 here)
-        self.input_t_seq = tf.unstack(self.x_t, self.sample_updates, axis=0)  # (M, T, batch_size, n_inpu)
+        self.input_t_seq = tf.unstack(self.x_t, self.sample_updates, axis=0)  # (1, batch_size, n_input)
         self.lstm_outputs_t_seq, self.state_t_seq = tf.nn.static_rnn(self.cell, self.input_t_seq,
                                                                      dtype="float32", initial_state=state)
-
-        self.output_t_logits_seq = tf.matmul(self.lstm_outputs_t_seq[-1], self.W) + self.b
+        # self.lstm_outputs_t_seq: a list of [None, n_unit]
+        self.output_t_logits_seq = tf.matmul(self.lstm_outputs_t_seq[-1], self.W) + self.b  # [None, n_class]
         self.loss_state_seq = self.lambda_state * tf.losses.mean_squared_error(state_t, self.state_t_seq)
 
-        self.y_as_list_seq = tf.unstack(self.y_t, num=self.sample_updates, axis=0)
-        self.loss_target_seq = tf.reduce_mean(
-            tf.losses.softmax_cross_entropy(self.y_t[-1], self.output_t_logits_seq))
+        self.y_as_list_seq = tf.unstack(self.y_t, num=self.sample_updates, axis=0)  # a list of [None, n_class]
+        self.loss_target_seq = tf.reduce_mean(tf.losses.softmax_cross_entropy(self.y_t[-1], self.output_t_logits_seq))
 
-        if self.use_buffer_bptt is True:
+        self.pred_loss_seq = tf.equal(tf.argmax(self.y_t[-1], 1), tf.argmax(self.output_t_logits_seq, 1))
+        self.pred_acc = tf.reduce_mean(tf.cast(self.pred_loss_seq, "float"))
+
+        if self.use_buffer_bptt:
             # for buffer-BPTT, update the parameters according to the loss.
             self.total_loss_seq = tf.reduce_mean(self.loss_target_seq)
+
+            if self.fix_buffer:
+                state_t = self.state_t_seq
         else:
             self.total_loss_seq = tf.reduce_mean(tf.add(self.loss_target_seq, self.loss_state_seq))
             grad = tf.gradients(self.total_loss_seq, state)
@@ -114,22 +113,29 @@ class FPT_Model:
 
         self.train_seq = tf.group(self.train_lstm, self.train_output)
 
-        # Val
+        # Validation
         self.val_input = tf.placeholder(tf.float32, [self.sample_updates, 1, self.n_input], name='Input0')
         self.val_label = tf.placeholder(tf.float32, [self.sample_updates, 1, self.n_classes], name='Target')
 
         self.input_seq = tf.unstack(self.val_input, self.sample_updates, axis=0)  # (M, T, batch_size, n_inpu)
         self.output_seq, self.val_state = tf.nn.static_rnn(self.cell, self.input_seq, dtype="float32", initial_state=self.init_state)
 
-        self.output_seq = tf.squeeze(self.output_seq, axis=1)
-        self.val_label = tf.squeeze(self.val_label, axis=1)
+        if tf.__version__ == '1.14.0':
+            self.logits_seq = tf.matmul(self.output_seq, self.W) + self.b
 
-        self.logits_seq = tf.matmul(self.output_seq, self.W) + self.b
+            # self.y_as_list_seq = tf.unstack(self.y_t, num=self.sample_updates, axis=0)
+            self.val_loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(self.val_label, self.logits_seq))
+            self.val_pred = tf.equal(tf.argmax(self.val_label, 2), tf.argmax(self.logits_seq, 2))
+            self.val_acc = tf.reduce_mean(tf.cast(self.val_pred, "float"))
+        else:
+            self.output_seq = tf.squeeze(self.output_seq, axis=1)
+            self.val_label = tf.squeeze(self.val_label, axis=1)
 
-        # self.y_as_list_seq = tf.unstack(self.y_t, num=self.sample_updates, axis=0)
-        self.val_loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(self.val_label, self.logits_seq))
-        self.val_pred = tf.equal(tf.argmax(self.val_label, 1), tf.argmax(self.logits_seq, 1))
-        self.val_acc = tf.reduce_mean(tf.cast(self.val_pred, "float"))
+            self.logits_seq = tf.matmul(self.output_seq, self.W) + self.b
+
+            self.val_loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(self.val_label, self.logits_seq))
+            self.val_pred = tf.equal(tf.argmax(self.val_label, 1), tf.argmax(self.logits_seq, 1))
+            self.val_acc = tf.reduce_mean(tf.cast(self.val_pred, "float"))
 
     # def sequentialise_input(self):
     #     assert False, 'why created this function?'
