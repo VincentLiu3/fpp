@@ -64,39 +64,51 @@ assert FLAGS.num_trajectory == 1, 'set FLAGS.num_trajectory to 1.'
 assert FLAGS.time_steps == 1, 'set FLAGS.time_steps to 1.'
 assert FLAGS.use_hybrid is True, 'use hybrid.'
 assert FLAGS.use_bptt is False, 'do not use bptt.'
-# assert FLAGS.learning_rate == FLAGS.output_learning_rate and FLAGS.output_learning_rate == FLAGS.state_learning_rate, 'set lr.'
 if FLAGS.fix_buffer:
     assert FLAGS.buffer_length == FLAGS.total_length, 'set total_length = buffer_length for fix buffer.'
 
 if FLAGS.dataset == 'cycleworld':
     data_name = '{}_cw'.format(FLAGS.cycleworld_size)
-    dir_name = 'results/results-cw/'
+    dir_name = 'results/results-cw'
 elif FLAGS.dataset == 'stochastic_dataset':
     data_name = 'sd'
-    dir_name = 'results/results-sd/'
+    dir_name = 'results/results-sd'
 elif FLAGS.dataset == 'ptb':
     data_name = 'ptb'
-    dir_name = 'results/results-ptb/'
+    dir_name = 'results/results-ptb'
 else:
     assert False, 'unknown dataset'
 
 if FLAGS.use_buffer_bptt:
-    pathname = dir_name + 'buffer_bptt/'
-
+    if FLAGS.fix_buffer:
+        mini_dir_name = 'fix_buffer_bptt'
+    else:
+        mini_dir_name = 'buffer_bptt'
 else:
-    pathname = dir_name + 'fpp/'
+    if FLAGS.fix_buffer:
+        mini_dir_name = 'fix_fpp'
+    else:
+        mini_dir_name = 'fpp'
 
 filename = '{},{},{},{},{},{},{},{},{},{}'.format(data_name, FLAGS.use_buffer_bptt, FLAGS.updates_per_step,
                                                   FLAGS.num_update, FLAGS.batch_size, FLAGS.learning_rate,
                                                   FLAGS.lambda_state, FLAGS.buffer_length, FLAGS.fix_buffer,
                                                   FLAGS.runs)
 
-os.makedirs(pathname, exist_ok=True)
-os.makedirs('logs', exist_ok=True)
-if FLAGS.fix_buffer:
-    log_file = "logs/fix-{}.log".format(filename)
-else:
-    log_file = "logs/{}.log".format(filename)
+os.makedirs('{}/{}/'.format(dir_name, mini_dir_name), exist_ok=True)
+os.makedirs('logs/{}'.format(mini_dir_name), exist_ok=True)
+log_file = 'logs/{}/{}.log'.format(mini_dir_name, filename)
+data_file = '{}/{}/{}'.format(dir_name, mini_dir_name, filename)
+result_file = '{}/{}_sweep.txt'.format(dir_name, mini_dir_name)
+
+
+def print_msg(file_name, message, verbose):
+    with open(file_name, 'a') as f:
+        f.write('{}\n'.format(message))
+
+    if verbose:
+        logging.info(message)
+
 
 num_batches = FLAGS.total_length
 accuracy_series = np.zeros(shape=(FLAGS.runs, num_batches//100))
@@ -110,31 +122,20 @@ for run_no in range(FLAGS.runs):
     tf.set_random_seed(constant_seed + run_no)
     np.random.seed(constant_seed + run_no)
 
-    if FLAGS.use_bptt:
-        with open(log_file, 'a') as f:
-            f.write('BPTT size: {} time_steps: {} run_no: {}\n'.format(FLAGS.cycleworld_size, FLAGS.time_steps, run_no))
-    else:
-        msg = 'cw_size={}. buffer_size={}. T={}. M={}. Run={}.'.format(FLAGS.cycleworld_size, FLAGS.buffer_length,
-                                                                       FLAGS.num_update, FLAGS.updates_per_step, run_no)
-        with open(log_file, 'a') as f:
-            f.write('{}\n'.format(msg))
-
-        if FLAGS.verbose:
-            logging.info(msg)
+    msg = 'cw_size={}. buffer_size={}. T={}. M={}. Run={}.'.format(FLAGS.cycleworld_size, FLAGS.buffer_length,
+                                                                   FLAGS.num_update, FLAGS.updates_per_step, run_no)
+    print_msg(log_file, msg, FLAGS.verbose)
 
     model = FPT_Model(FLAGS.dataset, FLAGS.use_buffer_bptt, FLAGS.fix_buffer,
                       FLAGS.n_input, FLAGS.n_classes, FLAGS.num_units, FLAGS.batch_size, FLAGS.updates_per_step,
                       FLAGS.learning_rate, FLAGS.clip_gradients, FLAGS.lambda_state, run_no)
 
-    # if FLAGS.use_prioritized_exp_replay:
-    #     buffer = Prioritized_Replay_Buffer(FLAGS.buffer_length, FLAGS.alpha)
-    # else:
     buffer = Replay_Buffer(FLAGS.buffer_length)
 
-    output_op = model.output
+    # output_op = model.output
     # train_op =  # use train for BRTT and train_seq for FPP
-    loss_op = model.loss
-    state_op = model.state
+    # loss_op = model.loss
+    # state_op = model.state
 
     with tf.Session() as sess:  
         init = tf.global_variables_initializer()
@@ -161,11 +162,7 @@ for run_no in range(FLAGS.runs):
         pred_series = []
         losses = []
 
-        if FLAGS.use_lstm:
-            state = np.zeros(shape=[2, FLAGS.num_trajectory, FLAGS.num_units])
-        else:
-            # initialize s_0 as zero vector
-            state = np.zeros(shape=[FLAGS.num_trajectory, FLAGS.num_units])
+        state = np.zeros(shape=[FLAGS.num_trajectory, FLAGS.num_units])
 
         while iter_id < num_batches:
             # get slice from time (iter-T to iter)
@@ -235,15 +232,11 @@ for run_no in range(FLAGS.runs):
                                            new_y_t_series, FLAGS.updates_per_step)
 
             if (iter_id+1) % 100 == 0:
-                # steps.append(iter)-
                 pred_series.append(sum_acc/count)
                 losses.append(sum_loss/count)
 
-                with open(log_file, 'a') as f:
-                    f.write('Steps {:5d}. Accuracy {:.2f}. Loss {:4f}.\n'.format(iter_id+1, sum_acc/count, sum_loss/count))
-
-                if FLAGS.verbose:
-                    logging.info('Steps {:5d}. Accuracy {:.2f}. Loss {:4f}.'.format(iter_id+1, sum_acc/count, sum_loss/count))
+                msg = 'Steps {:5d}. Accuracy {:.2f}. Loss {:4f}.'.format(iter_id+1, sum_acc/count, sum_loss/count)
+                print_msg(log_file, msg, FLAGS.verbose)
 
                 # corr = 0
                 sum_acc = 0
@@ -335,16 +328,10 @@ for run_no in range(FLAGS.runs):
                     val_acc_list.append(val_acc/count)
                     val_loss_list.append(val_loss/count)
 
-                    msg = 'Batch training: Steps {}. Batch Acc {:.2f}. Loss {:4f}.'.format(iter_id+1,
-                                                                                           val_acc/count,
-                                                                                           val_loss/count)
-                    with open(log_file, 'a') as f:
-                        f.write(msg)
-
-                    if FLAGS.verbose:
-                        logging.info(msg)
-
-                    online_loss = 0
+                    msg = 'Batch training: Steps {:5d}. Batch Acc {:.2f}. Loss {:4f}.'.format(iter_id+1,
+                                                                                              val_acc/count,
+                                                                                              val_loss/count)
+                    print_msg(log_file, msg, FLAGS.verbose)
 
             ave_val_acc[run_no] = val_acc_list
             ave_val_loss[run_no] = val_loss_list
@@ -356,14 +343,21 @@ if FLAGS.fix_buffer:
     ave_acc = np.mean(ave_val_acc, axis=1)
     ave_loss = np.mean(ave_val_loss, axis=1)
 
-    with open('{}/fix-sweep.txt'.format(dir_name), 'a') as f:
+    with open(result_file, 'a') as f:
         performance = '{:.4f},{:.4f},{:.4f},{:.4f}'.format(np.mean(ave_acc), np.std(ave_acc), np.mean(ave_loss), np.std(ave_loss))
         f.write('{},{}\n'.format(filename, performance))
         if FLAGS.verbose:
             logging.info('{},{}'.format(filename, performance))
 
+    save_dict = {
+        'acc': ave_val_acc,
+        'loss': ave_val_loss
+    }
+    np.save(data_file, save_dict)
+    logging.info('writing data to {}'.format(data_file))
+
 else:
-    with open('{}/sweep.txt'.format(dir_name), 'a') as f:
+    with open(result_file, 'a') as f:
         performance = '{:.4f},{:.4f}'.format(np.mean(accuracy_series), np.mean(loss_series))
         f.write('{},{}\n'.format(filename, performance))
         if FLAGS.verbose:
@@ -374,5 +368,5 @@ else:
         'acc': accuracy_series,
         'loss': loss_series
     }
-    np.save('{}{}'.format(pathname, filename), save_dict)
-    logging.info('writing data to {}{}'.format(pathname, filename))
+    np.save(data_file, save_dict)
+    logging.info('writing data to {}'.format(data_file))
