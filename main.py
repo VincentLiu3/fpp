@@ -1,5 +1,5 @@
 import tensorflow as tf
-from data import *
+from env.data import *
 from model.replay_buffer import Replay_Buffer
 from model.fpt import FPT_Model
 # from model.bptt import BPTT_Model
