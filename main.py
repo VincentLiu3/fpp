@@ -70,12 +70,12 @@ if FLAGS.fix_buffer:
 if FLAGS.dataset == 'cycleworld':
     data_name = '{}_cw'.format(FLAGS.cycleworld_size)
     dir_name = 'results/results-cw'
-elif FLAGS.dataset == 'stochastic_dataset':
+elif FLAGS.dataset in ['sd', 'stochastic_dataset']:
     data_name = 'sd'
     dir_name = 'results/results-sd'
-elif FLAGS.dataset == 'ptb':
-    data_name = 'ptb'
-    dir_name = 'results/results-ptb'
+elif FLAGS.dataset in ['lsd']:
+    data_name = 'lsd'
+    dir_name = 'results/results-lsd'
 else:
     assert False, 'unknown dataset'
 
@@ -113,8 +113,9 @@ def print_msg(file_name, message, verbose):
 num_batches = FLAGS.total_length
 accuracy_series = np.zeros(shape=(FLAGS.runs, num_batches//100))
 loss_series = np.zeros(shape=(FLAGS.runs, num_batches//100))
-ave_val_acc = np.zeros(shape=(FLAGS.runs, FLAGS.offline_update//500))
-ave_val_loss = np.zeros(shape=(FLAGS.runs, FLAGS.offline_update//500))
+val_step = 500
+ave_val_acc = np.zeros(shape=(FLAGS.runs, FLAGS.offline_update//val_step))
+ave_val_loss = np.zeros(shape=(FLAGS.runs, FLAGS.offline_update//val_step))
 
 for run_no in range(FLAGS.runs):
     constant_seed = 0
@@ -145,10 +146,10 @@ for run_no in range(FLAGS.runs):
             X, Y = generate_cw(FLAGS.cycleworld_size, FLAGS.num_trajectory, num_batches)
             # X.shape = (1, 100000, 2)
             # Y.shape = (1, 100000, 2)
-        elif FLAGS.dataset == 'stochastic_dataset':
+        elif FLAGS.dataset in ['sd', 'stochastic_dataset']:
             X, Y = generate_stochastic_data(FLAGS.num_trajectory, num_batches)
-        elif FLAGS.dataset == 'ptb':
-            pass
+        elif FLAGS.dataset in ['lsd']:
+            X, Y = generate_stochastic_data(FLAGS.num_trajectory, num_batches, is_short=False)
 
         iter_id = 0  # FLAGS.time_steps
         # corr = 0
@@ -194,7 +195,6 @@ for run_no in range(FLAGS.runs):
             sum_loss += loss
 
             if FLAGS.fix_buffer is False:
-            # if True:
                 # TRAINING
                 if iter_id >= FLAGS.updates_per_step:  # updates_per_step = T
                     for _ in range(FLAGS.num_update):
@@ -256,8 +256,7 @@ for run_no in range(FLAGS.runs):
 
             for iter_id in range(FLAGS.offline_update):
                 # Training
-                x_t_series, s_tm1_series, s_t_series, y_t_series, idx_series = buffer.sample_batch(FLAGS.batch_size,
-                                                                                                   FLAGS.updates_per_step)
+                x_t_series, s_tm1_series, s_t_series, y_t_series, idx_series = buffer.sample_batch(FLAGS.batch_size, T)
 
                 _, new_s_tm1, new_s_t = sess.run([model.train_seq, model.state_tm1_c_seq, model.state_t_c_seq],
                                                                feed_dict={
@@ -283,7 +282,7 @@ for run_no in range(FLAGS.runs):
                                    new_y_t_series, FLAGS.updates_per_step)
 
                 # Testing: what do we want to report the accuracy?
-                if (iter_id+1) % 500 == 0:
+                if (iter_id+1) % val_step == 0:
                     # Testing
                     test_id = 0
                     val_loss = 0

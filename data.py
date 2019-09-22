@@ -39,16 +39,15 @@ def generate_cpy(T,batch_size):
     return input_data,output_data
 
 
-def generate_stochastic_data(batch_size, num_batches):
+def generate_stochastic_data(batch_size, num_batches, is_short=True):
     total_series_length = num_batches * batch_size
-    x,y = gen_data(total_series_length)
-    X = np.zeros(shape=(batch_size,num_batches,2))
-    Y = np.zeros(shape=(batch_size,num_batches,2))
+    x, y = gen_data(total_series_length, is_short)
+    X = np.zeros(shape=(batch_size, num_batches, 2))
+    Y = np.zeros(shape=(batch_size, num_batches, 2))
     for i in range(batch_size):
-        X[i] = one_hot_encode(np.squeeze(x[i*(num_batches):(i+1)*num_batches]),2)
-        Y[i] = one_hot_encode(np.squeeze(y[i*(num_batches):(i+1)*num_batches]),2)
-
-    return X,Y
+        X[i] = one_hot_encode(np.squeeze(x[i*num_batches:(i+1)*num_batches]),2)
+        Y[i] = one_hot_encode(np.squeeze(y[i*num_batches:(i+1)*num_batches]),2)
+    return X, Y
 
 
 def generate_cw(cycleworld_size, batch_size, num_batches):
