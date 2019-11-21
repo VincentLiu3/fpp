@@ -60,14 +60,15 @@ class Param2Vec():
         return var_list
 
 
-class UORO_Model():
-    def __init__(self, input_size, hidden_size, output_size, lr, optimizer_type='Adam',
+class UOROModel():
+    def __init__(self, input_size, hidden_size, output_size, lr, device, optimizer_type='RMSprop',
                  epsilon_perturbation=1e-7, epsilon_stability=1e-7):
         """
         """
         # super(UORO_Model, self).__init__()
-        assert optimizer_type in ['SGD', 'Adam']
+        assert optimizer_type in ['SGD', 'RMSprop']
         self.hidden_size = hidden_size
+        self.device = device
         self.rnn_model = SimpleRNN(input_size, hidden_size, output_size)
 
         self.epsilon_perturbation = epsilon_perturbation
@@ -76,7 +77,7 @@ class UORO_Model():
         if optimizer_type == 'SGD':
             self.optimizer = torch.optim.SGD(self.rnn_model.parameters(), lr=lr)
         else:
-            self.optimizer = torch.optim.Adam(self.rnn_model.parameters(), lr=lr)
+            self.optimizer = torch.optim.RMSprop(self.rnn_model.parameters(), lr=lr, alpha=0.99)
 
         # lambda1 = lambda epoch: 1 / (1 + 0.003 * np.sqrt(epoch))
         # self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda1)
@@ -100,18 +101,18 @@ class UORO_Model():
         self.theta_toupee: row vector of size (params, )
         """
         # print('---')
-        # print(x.size())
-        # print(s.size())
-        # print(y.size())
-        # state_old = torch.tensor(self._state, requires_grad=True)
         state_old = self._state.clone().detach().requires_grad_(True)
 
         y_1, state_new = self.rnn_model(x, state_old)
-        loss = self.criterion(y_1, y)
+        # print(x.size())
+        # print(y.size())
+        # print(y_1[-1].size())
+        loss = self.criterion(y_1[-1], y)
 
-        correct_prediction = torch.equal(torch.argmax(y_1, 1), y)  #torch.argmax(y, 1)
+        correct_prediction = torch.equal(torch.argmax(y_1[-1], 1), y)  #torch.argmax(y, 1)
         accuracy = correct_prediction.__float__()
 
+        # update weights
         delta_s = grad(loss, state_old, retain_graph=True)[0]
         delta_theta = grad(loss, self.nn_param.param_list, retain_graph=True)
         delta_theta_vec = self.nn_param.merge(delta_theta)

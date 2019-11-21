@@ -9,7 +9,7 @@ from collections import namedtuple
 Transition = namedtuple('Transition', ('obs', 'state_old', 'state_new', 'y'))
 
 
-class Replay_Buffer():
+class ReplayBuffer():
     def __init__(self, size):
         """Create Replay buffer.
         Parameters

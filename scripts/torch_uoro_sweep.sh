@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-lr_list=(0.01 0.003 0.001 0.0003 0.0001)
+lr_list=(0.001)
 for lr in ${lr_list[@]}; do
-    python3 main_uoro.py --total_length=5000 --dataset='cycleworld' --cycleworld_size=10 --n_input=2 --n_output=2 --num_units=4 --lr=$lr --runs=10 --verbose=False &
+    python3 main_torch.py --dataset='cycleworld' --data_size 50000 --num_units=4 --model_name=uoro --state_update True --lr=$lr --num_run=10 --use_gpu=False --verbose=True
 done

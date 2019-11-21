@@ -8,11 +8,7 @@ def str2bool(v):
 
 def get_parser():
     """
-    two ways to get a list/dictionary of args
-    vars(args)
-    args._get_kwargs()
-
-    USE this to get args
+    Instruction: USE these commands to get args
     parser = get_parser()
     args = parser.parse_args('')
     args = add_args(args)
@@ -39,7 +35,8 @@ def get_parser():
     parser.add_argument('--T', type=int, default=10, help='Truncate Parameter')
     parser.add_argument('--buffer_size', type=int, default=1000, help='Buffer size')
     parser.add_argument('--num_update', type=int, default=1, help='Number of State Updates per Step M')
-    parser.add_argument('--batch_size', type=int, default=2, help='Mini-batch Size B')
+    parser.add_argument('--batch_size', type=int, default=1, help='Mini-batch Size B')
+    parser.add_argument('--use_gpu', type=str2bool, default='False', help='Use GPU')
     return parser
 
 

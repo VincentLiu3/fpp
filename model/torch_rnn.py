@@ -10,9 +10,11 @@ class SimpleRNN(nn.Module):
 
     def forward(self, x, state):
         """
+        :param
         x: (T, batch_size, input_size)
         state: (1, batch_size, hidden_size)
 
+        :return
         y: (T, batch_size, output_size)
         state: (1, batch_size, hidden_size)
         """

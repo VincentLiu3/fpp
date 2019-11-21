@@ -1,8 +1,8 @@
 import torch
 from env.data import *
-from model.uoro import UORO_Model
-from model.torch_fpp import FPP_Model
-from model.torch_buffer import Replay_Buffer
+from model.torch_uoro import UOROModel
+from model.torch_fpp import FPPModel
+from model.torch_buffer import ReplayBuffer
 from model.utils import get_parser, add_args, print_msg
 import os
 import logging
@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 
 def get_file_name(FLAGS):
-    if FLAGS.dataset == 'cycleworld':
+    if FLAGS.dataset in ['cycleworld', 'cw']:
         data_name = '{}_cw'.format(FLAGS.env_size)
         dir_name = 'results/results-cw'
     elif FLAGS.dataset in ['stochastic_dataset']:
@@ -26,13 +26,10 @@ def get_file_name(FLAGS):
         mini_dir_name = 'uoro'
         filename = '{},{},{},{}'.format(data_name, FLAGS.data_size, FLAGS.num_run, FLAGS.lr)
     elif FLAGS.model_name == 'fpp':
-        if FLAGS.state_update:
-            mini_dir_name = 'fpp'
-        else:
-            mini_dir_name = 'buffer_bptt'
-        filename = '{},{},{},{},{},{},{},{},{}'.format(data_name, FLAGS.data_size, FLAGS.num_run, FLAGS.reg_lambda,
-                                                       FLAGS.buffer_size, FLAGS.T, FLAGS.num_update, FLAGS.batch_size,
-                                                       FLAGS.lr)
+        mini_dir_name = 'fpp'
+        filename = '{},{},{},{},{},{},{},{},{},{}'.format(data_name, FLAGS.state_update, FLAGS.data_size, FLAGS.num_run,
+                                                          FLAGS.reg_lambda, FLAGS.buffer_size, FLAGS.T, FLAGS.num_update,
+                                                          FLAGS.batch_size, FLAGS.lr)
     else:
         assert False, 'unknown model name'
 
@@ -49,14 +46,19 @@ if __name__ == '__main__':
     FLAGS = parser.parse_args()
     FLAGS = add_args(FLAGS)
 
+    if FLAGS.use_gpu and torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+
     data_name, filename, log_file, data_file, result_file = get_file_name(FLAGS)
     data_size = FLAGS.data_size
+    constant_seed = 0
     eval_size = 100
     accuracy_series = np.zeros(shape=(FLAGS.num_run, data_size//eval_size))
     loss_series = np.zeros(shape=(FLAGS.num_run, data_size//eval_size))
 
     for run_no in range(FLAGS.num_run):
-        constant_seed = 0
         np.random.seed(constant_seed + run_no)
         torch.manual_seed(constant_seed + run_no)
 
@@ -66,7 +68,7 @@ if __name__ == '__main__':
         # generate dataset
         # X.shape = (1, 100000, 2)
         # Y.shape = (1, 100000, 2)
-        if FLAGS.dataset == 'cycleworld':
+        if FLAGS.dataset in ['cycleworld', 'cw']:
             X, Y = generate_cw(FLAGS.env_size, FLAGS.num_trajectory, data_size)
             FLAGS.n_input = FLAGS.n_output = 2
         elif FLAGS.dataset in ['sd', 'stochastic_dataset']:
@@ -88,11 +90,11 @@ if __name__ == '__main__':
 
         # define model
         if FLAGS.model_name == 'fpp':
-            model = FPP_Model(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output, FLAGS.lr, FLAGS.state_update,
-                              FLAGS.batch_size, FLAGS.T, FLAGS.reg_lambda)
-            buffer = Replay_Buffer(FLAGS.buffer_size)
+            model = FPPModel(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output, FLAGS.lr, FLAGS.state_update,
+                             FLAGS.batch_size, FLAGS.T, FLAGS.reg_lambda, device)
+            buffer = ReplayBuffer(FLAGS.buffer_size)
         else:
-            model = UORO_Model(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output, FLAGS.lr)
+            model = UOROModel(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output, FLAGS.lr, device)
 
         # training
         iter_id = 0
@@ -107,7 +109,6 @@ if __name__ == '__main__':
 
         model.initialize_state()
         while iter_id < data_size:
-            # print(iter_id)
             # get slice from time (iter-T to iter)
             x_t = X[:, iter_id:(iter_id+1)].reshape([1, 1, FLAGS.n_input])
             y_t = Y[:, iter_id:(iter_id+1)].reshape([1])
@@ -118,15 +119,14 @@ if __name__ == '__main__':
             sum_loss += loss
             count += 1
 
-            # for FPP
             if FLAGS.model_name == 'fpp':
-                # add to buffer
+                # add data to buffer
                 data = x_t, state_old, state_new, y_t
                 buffer.add(data)
 
                 if iter_id >= FLAGS.T:
-                    # sample from buffer
                     for _ in range(FLAGS.num_update):
+                        # sample from buffer
                         x_batch, state_old_batch, state_new_batch, y_batch, idx_series = buffer.sample_batch(FLAGS.batch_size,
                                                                                                              FLAGS.T)
                         # update FPP
@@ -138,7 +138,7 @@ if __name__ == '__main__':
                         # update buffer
                         for b in range(idx_series.shape[0]):
                             buffer.replace_old(idx_series[b][0], state_old_updated[:, b:(b+1), :])
-                            buffer.replace_new(idx_series[b][-1], state_new_updated[:, b:(b + 1), :])
+                            buffer.replace_new(idx_series[b][-1], state_new_updated[:, b:(b+1), :])
 
             if (iter_id+1) % 100 == 0:
                 pred_series.append(sum_acc/count)
@@ -165,14 +165,13 @@ if __name__ == '__main__':
         accuracy_series[run_no] = pred_series
         loss_series[run_no] = losses
 
-    # save result
+    # save result and data
     with open(result_file, 'a') as f:
         performance = '{:.4f},{:.4f}'.format(np.mean(accuracy_series), np.mean(loss_series))
         f.write('{},{}\n'.format(filename, performance))
         if FLAGS.verbose:
             logging.info('{},{}'.format(filename, performance))
 
-    # np.save('results/baseline_{}-cw'.format(FLAGS.env_size),baseline)
     save_dict = {
         'acc': accuracy_series,
         'loss': loss_series
