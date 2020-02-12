@@ -4,8 +4,8 @@ from .torch_rnn import SimpleRNN
 # import numpy as np
 
 
-class FPPModel:
-    def __init__(self, input_size, hidden_size, output_size, lr, state_update, batch_size, T, reg_lambda, device):
+class TBPTTModel:
+    def __init__(self, input_size, hidden_size, output_size, lr, state_update, batch_size, T, overlap, device):
 
         self.state_update = state_update
         self.lr = lr
@@ -16,9 +16,7 @@ class FPPModel:
 
         self.T = T
         self.batch_size = batch_size  # B
-        self.reg_lambda = reg_lambda
-
-        self.num_update = 1  # number of blocks to sample for each time step
+        self.overlap = overlap
 
         self.rnn_model = SimpleRNN(input_size, hidden_size, output_size).to(self.device)
         self.criterion = torch.nn.CrossEntropyLoss()  # Input: (N, C), Target: (N)
@@ -32,7 +30,7 @@ class FPPModel:
     def forward(self, x, y):
         """
         x: [T, 1, input_size]
-        y:  [T, output_size]
+        y:  [T, 1]
         with T = 1
         """
         x = x.to(self.device)
@@ -68,37 +66,19 @@ class FPPModel:
         y_batch = y_batch.to(self.device)
 
         # get init state and s_T
-        state_old = s_batch[0:1].clone().to(self.device).detach().requires_grad_(True)
-        state_new = s_new_batch[-1:].clone().to(self.device).detach().requires_grad_(True)
-
+        state_old = s_batch[0:1].clone().to(self.device).detach()
         output_y_batch, output_s_batch = self.rnn_model(x_batch, state_old)
-        # print(x_batch.size())
-        # print(s_batch.size())
-        # print(output_y_batch.size())
-        # print(output_s_batch[-1:].size())
-        # print(state_new.size())
-        loss = self.criterion(output_y_batch[-1], y_batch[-1])  # (N, C) and (N)
-
-        if self.state_update:
-            loss += self.reg_lambda * self.mse_loss(state_new, output_s_batch[-1:])
+        # Question: update all outputs or just one?
+        if self.overlap:
+            # if overlap, only computed the loss for the final prediction
+            loss = self.criterion(output_y_batch[-1], y_batch[-1])
+        else:
+            # if non-overlap, computed the loss for all predictions
+            output_y_batch = output_y_batch.squeeze(dim=1)
+            y_batch = y_batch.squeeze(dim=1)
+            loss = self.criterion(output_y_batch, y_batch)
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-
-        if self.state_update:
-            # update states: see https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_autograd.html
-            with torch.no_grad():
-                state_old_updated = (state_old - self.lr * state_old.grad).clone().detach().cpu()
-                state_new_updated = (state_new - self.lr * state_new.grad).clone().detach().cpu()
-
-                state_old.grad.zero_()
-                state_new.grad.zero_()
-
-            # Alternative: set no_grad for state_old and state_new and manually get the gradients
-            # grad_s = grad(loss, state_old, retain_graph=True)[0]
-            # grad_s_t = grad(loss, state_new, retain_graph=True)[0]
-
-            return loss.item(), state_old_updated, state_new_updated
-        else:
-            return loss.item(), None, None
+        return loss.item(), None, None
