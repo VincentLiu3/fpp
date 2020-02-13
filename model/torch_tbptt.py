@@ -28,11 +28,6 @@ class TBPTTModel:
         self._state = torch.zeros(size=[1, 1, self.hidden_size], requires_grad=True).float().to(self.device)
 
     def forward(self, x, y):
-        """
-        x: [T, 1, input_size]
-        y:  [T, 1]
-        with T = 1
-        """
         x = x.to(self.device)
         y = y.to(self.device)
         with torch.no_grad():
@@ -50,6 +45,22 @@ class TBPTTModel:
             self._state = state_new
 
         return loss.item(), accuracy, state_old.cpu(), state_new.cpu()
+
+    def predict_mnist(self, x, y):
+        # print('---')
+        state_old = self._state.clone().detach()
+        y_1, state_new = self.rnn_model(x, state_old)
+
+        # only compute loss for the last 14 time steps
+        y_1 = y_1.squeeze(dim=1)[14:]
+        y = y[14:]
+        loss = self.criterion(y_1, y)
+
+        torch.eq(torch.argmax(y_1, 1), y)
+        correct_prediction = torch.eq(torch.argmax(y_1, 1), y)
+        accuracy = correct_prediction.sum().item()
+
+        return loss.item(), accuracy
 
     def train(self, x_batch, s_batch, s_new_batch, y_batch):
         """

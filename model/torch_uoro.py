@@ -153,6 +153,29 @@ class UOROModel():
 
         return loss.item(), accuracy, state_old, state_new
 
+    def predict_mnist(self, x, y):
+        """
+        x: input of size (1, 1, input_size)
+        s: previous recurrent state of size (1, 1, hidden_size)
+        y: target of size (1,)
+
+        self.s_toupee: column vector of size (state, )
+        self.theta_toupee: row vector of size (params, )
+        """
+        # print('---')
+        state_old = self._state.clone().detach()
+        y_1, state_new = self.rnn_model(x, state_old)
+
+        # only compute loss for the last 14 time steps
+        y_1 = y_1.squeeze(dim=1)[14:]
+        y = y[14:]
+        loss = self.criterion(y_1, y)
+
+        torch.eq(torch.argmax(y_1, 1), y)
+        correct_prediction = torch.eq(torch.argmax(y_1, 1), y)
+        accuracy = correct_prediction.sum().item()
+
+        return loss.item(), accuracy
 
 
 

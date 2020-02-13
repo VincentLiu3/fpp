@@ -60,6 +60,8 @@ if __name__ == '__main__':
     eval_size = 100
     accuracy_series = np.zeros(shape=(FLAGS.num_run, data_size//eval_size))
     loss_series = np.zeros(shape=(FLAGS.num_run, data_size//eval_size))
+    ave_accuracy = np.zeros(shape=[FLAGS.num_run])
+    ave_loss = np.zeros(shape=[FLAGS.num_run])
 
     for run_no in range(FLAGS.num_run):
         np.random.seed(constant_seed + run_no)
@@ -75,14 +77,17 @@ if __name__ == '__main__':
             # X.shape = (1, data_size, 2)
             # Y.shape = (1, data_size, 2)
             FLAGS.n_input = FLAGS.n_output = 2
+            FLAGS.num_units = 4
         elif FLAGS.dataset in ['sd', 'stochastic_dataset']:
             from env.data import generate_stochastic_data
             X, Y = generate_stochastic_data(FLAGS.num_trajectory, data_size)
             FLAGS.n_input = FLAGS.n_output = 2
+            FLAGS.num_units = 32
         elif FLAGS.dataset in ['lsd']:
             from env.data import generate_stochastic_data
             X, Y = generate_stochastic_data(FLAGS.num_trajectory, data_size, is_short=False)
             FLAGS.n_input = FLAGS.n_output = 2
+            FLAGS.num_units = 32
         elif FLAGS.dataset in ['anbn']:
             from env.anbn import generate_anbn_data
             X, Y = generate_anbn_data(data_size, k=1, l=4, num_class=3)
@@ -92,6 +97,7 @@ if __name__ == '__main__':
             mnist_dataset = MnistDataset(dataset_folder='./data')
             FLAGS.n_input = 28
             FLAGS.n_output = 10
+            FLAGS.num_units = 256
         else:
             assert False, 'unknown dataset'
 
@@ -101,6 +107,7 @@ if __name__ == '__main__':
             Y = torch.from_numpy(np.argmax(Y, axis=2)).long()
 
         # define model
+        logging.info('init model {}-{}-{}'.format(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output))
         if FLAGS.model_name == 'fpp':
             model = FPPModel(FLAGS.n_input, FLAGS.num_units, FLAGS.n_output, FLAGS.lr, FLAGS.state_update,
                              FLAGS.batch_size, FLAGS.T, FLAGS.reg_lambda, device)
@@ -128,22 +135,27 @@ if __name__ == '__main__':
         model.initialize_state()
         while iter_id < data_size:
             if FLAGS.dataset in ['sequential_mnist', 'mnist']:
+
+                # compute accuracy first for mnist
+                if iter_id % 28 == 0:
+                    x_t, y_t = mnist_dataset.get_image(iter_id)
+                    loss, acc = model.predict_mnist(x_t, y_t)
+
+                    sum_acc += acc
+                    sum_loss += loss
+                    count += 14
+
                 x_t, y_t = mnist_dataset[iter_id]
+
             else:
                 # get slice from time (iter-T to iter)
                 x_t = X[:, iter_id:(iter_id+1)].reshape([1, 1, FLAGS.n_input])
                 y_t = Y[:, iter_id:(iter_id+1)].reshape([1])
 
             loss, acc, state_old, state_new = model.forward(x_t, y_t)
-            # print(y_t)
 
-            if FLAGS.dataset in ['sequential_mnist', 'mnist']:
-                # only compute loss for the last 14 time steps
-                if iter_id % 28 >= 15:
-                    sum_acc += acc
-                    sum_loss += loss
-                    count += 1
-            else:
+            if FLAGS.dataset not in ['sequential_mnist', 'mnist']:
+                # compute accuracy first for other datasets
                 sum_acc += acc
                 sum_loss += loss
                 count += 1
@@ -174,6 +186,7 @@ if __name__ == '__main__':
                 buffer.add(data)
 
                 if (FLAGS.overlap and iter_id >= FLAGS.T) or (FLAGS.overlap is False and (iter_id+1) % FLAGS.T == 0):
+                    # sample all from buffer
                     x_batch, state_old_batch, state_new_batch, y_batch, idx_series = buffer.sample_all()
                     # what should be the initial state for T-BPTT? zero vector?
                     trn_loss, state_old_updated, state_new_updated = model.train(x_batch, state_old_batch, state_new_batch, y_batch)
@@ -194,21 +207,22 @@ if __name__ == '__main__':
                     msg = 'Steps {:5d}. Accuracy {:.2f}. Loss {:4f}.'.format(iter_id+1, sum_acc/count, sum_loss/count)
                 print_msg(log_file, msg, FLAGS.verbose)
 
-                # corr = 0
-                sum_acc = 0
-                sum_loss = 0
-                sum_trn_loss = 0
-                count = 0
-                update_count = 0
+                # sum_acc = 0
+                # sum_loss = 0
+                # sum_trn_loss = 0
+                # count = 0
+                # update_count = 0
 
             iter_id += 1
 
         accuracy_series[run_no] = pred_series
         loss_series[run_no] = losses
+        ave_accuracy[run_no] = sum_acc/count
+        ave_loss[run_no] = sum_loss/count
 
     # save result and data
     with open(result_file, 'a') as f:
-        performance = '{:.4f},{:.4f}'.format(np.mean(accuracy_series), np.mean(loss_series))
+        performance = '{:.4f},{:.4f}'.format(np.mean(ave_accuracy), np.mean(ave_loss))
         f.write('{},{}\n'.format(filename, performance))
         if FLAGS.verbose:
             logging.info('{},{}'.format(filename, performance))
