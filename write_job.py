@@ -41,18 +41,20 @@ if __name__ == '__main__':
     count = args.start
 
     # cw
-    # domain_lst = ['cw']
-    # # model_lst = ['fpp']
-    # # state_update_lst = ['True', 'False']
-    # # overlap_lst = ['True']
-    # # T_lst = [1, 2, 4]
-    # # M_lst = [1]
-    # # B_lst = [1, 2, 4, 6, 16]
-    # lr_lst = [0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]
-    # num_step_lst = [5000]
+    domain_lst = ['cw']
+    model_lst = ['fpp']
+    state_update_lst = ['True', 'False']
+    overlap_lst = ['True']
+    T_lst = [10]
+    M_lst = [1]
+    B_lst = [1]
+    lr_lst = [0.001]
+    num_step_lst = [10000]
 
-    # all_comb = list(product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
-    # count = write_jobs(all_comb, count, args.verbose)
+    all_comb = list(
+        product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
+    count = write_jobs(all_comb, count, args.verbose)
+
     #
     # model_lst = ['t-bptt']
     # state_update_lst = ['True']
@@ -104,52 +106,52 @@ if __name__ == '__main__':
     # count = write_jobs(all_comb, count, args.verbose)
 
     # mnist
-    domain_lst = ['mnist']
-    model_lst = ['fpp']
-    state_update_lst = ['True']
-    overlap_lst = ['True']
-    T_lst = [7, 14, 21, 28]
-    M_lst = [1]
-    B_lst = [1]
-    lr_lst = [0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]
-    num_step_lst = [28000]
+    # domain_lst = ['mnist']
+    # model_lst = ['fpp']
+    # state_update_lst = ['True']
+    # overlap_lst = ['True']
+    # T_lst = [7, 14, 21, 28]
+    # M_lst = [1]
+    # B_lst = [1]
+    # lr_lst = [0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]
+    # num_step_lst = [28000]
+    #
+    # all_comb = list(
+    #     product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
+    # count = write_jobs(all_comb, count, args.verbose)
+    #
+    # model_lst = ['t-bptt']
+    # state_update_lst = ['True']
+    # overlap_lst = ['True', 'False']
+    # M_lst = [1]
+    # B_lst = [1]
+    # all_comb = list(
+    #     product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
+    # count = write_jobs(all_comb, count, args.verbose)
+    #
+    # model_lst = ['uoro']
+    # state_update_lst = ['True']
+    # overlap_lst = ['True']
+    # T_lst = [1]
+    # M_lst = [1]
+    # B_lst = [1]
+    # all_comb = list(
+    #     product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
+    # count = write_jobs(all_comb, count, args.verbose)
+    #
+    # domain_lst = ['mnist']
+    # model_lst = ['fpp']
+    # state_update_lst = ['True']
+    # overlap_lst = ['True']
+    # T_lst = [28]
+    # M_lst = [1]
+    # B_lst = [8, 16]
+    # lr_lst = [0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]
+    # num_step_lst = [28000]
+    #
+    # all_comb = list(
+    #     product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
+    # count = write_jobs(all_comb, count, args.verbose)
 
-    all_comb = list(
-        product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
-    count = write_jobs(all_comb, count, args.verbose)
-
-    model_lst = ['t-bptt']
-    state_update_lst = ['True']
-    overlap_lst = ['True', 'False']
-    M_lst = [1]
-    B_lst = [1]
-    all_comb = list(
-        product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
-    count = write_jobs(all_comb, count, args.verbose)
-
-    model_lst = ['uoro']
-    state_update_lst = ['True']
-    overlap_lst = ['True']
-    T_lst = [1]
-    M_lst = [1]
-    B_lst = [1]
-    all_comb = list(
-        product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
-    count = write_jobs(all_comb, count, args.verbose)
-
-    domain_lst = ['mnist']
-    model_lst = ['fpp']
-    state_update_lst = ['True']
-    overlap_lst = ['True']
-    T_lst = [28]
-    M_lst = [1]
-    B_lst = [8, 16]
-    lr_lst = [0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001]
-    num_step_lst = [28000]
-
-    all_comb = list(
-        product(domain_lst, num_step_lst, model_lst, state_update_lst, overlap_lst, T_lst, M_lst, B_lst, lr_lst))
-    count = write_jobs(all_comb, count, args.verbose)
-
-    print('sbatch --array={}-{} ./run.sh'.format(0, count-1))
+    # print('sbatch --array={}-{} ./run.sh'.format(0, count-1))
     write_run_all_jobs(count)

@@ -8,7 +8,7 @@ def str2bool(v):
 
 def get_parser():
     """
-    Instruction: USE these commands to get args
+    Use these commands to get args
     parser = get_parser()
     args = parser.parse_args('')
     args = check_args(args)
@@ -21,15 +21,15 @@ def get_parser():
     parser.add_argument('--num_trajectory', type=int, default=1, help='Number of trajectory (default: 1)')
     parser.add_argument('--num_run', type=int, default=1, help='Number of runs')
     parser.add_argument('--verbose', type=str2bool, default='True', help='Print or write to a file')
-    # representation
+    # RNN optimization
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for RNN')
     parser.add_argument('--reg_lambda', type=float, default=1.0, help='Lambda for FPP')
-    # RNN
+    # RNN architecture
     parser.add_argument('--n_input', type=int, default=2, help='Dimension of input')
     parser.add_argument('--n_output', type=int, default=2, help='Dimension of output')
     parser.add_argument('--num_units', type=int, default=4, help='Number of hidden units')
     parser.add_argument('--use_lstm', type=str2bool, default='False', help='Use LSTM')
-    # model
+    # RNN param
     parser.add_argument('--model_name', type=str, default='fpp', help='Model: uoro or fpp')
     parser.add_argument('--state_update', type=str2bool, default='True', help='FPP: w/ or w/o state update')
     parser.add_argument('--overlap', type=str2bool, default='True', help='T-BRTT: overlap update or not')

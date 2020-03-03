@@ -27,13 +27,16 @@ class FPPModel:
         self._state = None
 
     def initialize_state(self):
+        """
+        initialize a state with size x: [1, 1, hidden_size]
+        """
         self._state = torch.zeros(size=[1, 1, self.hidden_size], requires_grad=True).float().to(self.device)
 
     def forward(self, x, y):
         """
+        inputs:
         x: [T, 1, input_size]
         y:  [T, output_size]
-        with T = 1
         """
         x = x.to(self.device)
         y = y.to(self.device)
@@ -71,7 +74,6 @@ class FPPModel:
         y = y[14:]
         loss = self.criterion(y_1, y)
 
-        torch.eq(torch.argmax(y_1, 1), y)
         correct_prediction = torch.eq(torch.argmax(y_1, 1), y)
         accuracy = correct_prediction.sum().item()
 

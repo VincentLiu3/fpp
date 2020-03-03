@@ -2,16 +2,6 @@ import torch
 from torch.autograd import grad, Variable
 from .torch_rnn import SimpleRNN, SimpleLSTM
 import numpy as np
-# from artemis.general.nested_structures import nested_map
-# from uoro_demo.torch_utils.interfaces import TrainableStatefulModule
-# from uoro_demo.torch_utils.torch_helpers import clone_em
-# from uoro_demo.torch_utils.training import set_optimizer_learning_rate
-# from uoro_demo.torch_utils.variable_workshop import MergedVariable
-
-# if torch.cuda.is_available():
-#     device = torch.device('cuda')
-# else:
-# device = torch.device('cpu')
 
 
 class Param2Vec():
@@ -63,9 +53,7 @@ class Param2Vec():
 class UOROModel():
     def __init__(self, input_size, hidden_size, output_size, lr, device, optimizer_type='RMSprop',
                  epsilon_perturbation=1e-7, epsilon_stability=1e-7):
-        """
-        """
-        # super(UORO_Model, self).__init__()
+
         assert optimizer_type in ['SGD', 'RMSprop']
         self.hidden_size = hidden_size
         self.device = device

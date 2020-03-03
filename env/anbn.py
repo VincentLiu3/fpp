@@ -13,7 +13,7 @@ def one_hot_decode(encoded_seq):
 
 def get_an_bn_array(num_data, k, l):
     """
-    modified from ...
+    modified from https://github.com/petered/uoro-demo
     """
     x = np.zeros([num_data], dtype=int)
 
